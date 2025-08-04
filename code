@@ -1,0 +1,61 @@
+# 📦 Step 1: Install Dependencies
+!pip install -q transformers torchaudio librosa pyannote.audio gradio
+
+# Login to Hugging Face
+from huggingface_hub import notebook_login
+notebook_login()  # It will prompt you to enter your Hugging Face token
+
+# 📁 Step 2: Upload Audio File
+from google.colab import files
+uploaded = files.upload()
+
+# 🧠 Step 3: Load Whisper ASR Model
+from transformers import pipeline
+asr = pipeline("automatic-speech-recognition", model="openai/whisper-base")
+
+# 📥 Step 4: Transcribe Audio
+import torchaudio
+
+file_path = list(uploaded.keys())[0]
+waveform, sample_rate = torchaudio.load(file_path)
+transcription = asr(file_path, chunk_length_s=30, stride_length_s=(5,2))
+print("✅ Transcription Done!\n")
+print(transcription["text"])
+
+# 🔍 Step 5: Keyword Search
+def search_keywords(transcript, keywords):
+    results = []
+    for keyword in keywords:
+        if keyword.lower() in transcript.lower():
+            results.append(f"✅ Found '{keyword}'")
+        else:
+            results.append(f"❌ Not Found '{keyword}'")
+    return results
+
+# Example
+keywords = ["deadline", "project", "budget"]
+print(search_keywords(transcription["text"], keywords))
+
+# 👤 Step 6: Speaker Diarization (Optional but Powerful)
+from pyannote.audio import Pipeline
+
+# This model requires you to accept usage terms on HF
+pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization")
+
+# Diarization
+diarization = pipeline(file_path)
+print("\n🗣️ Speaker Segments:\n")
+for turn, _, speaker in diarization.itertracks(yield_label=True):
+    print(f"{speaker} speaks from {turn.start:.1f}s to {turn.end:.1f}s")
+
+# 📌 (Optional) Visualize with Gradio
+import gradio as gr
+
+def keyword_search_ui(keywords):
+    result = search_keywords(transcription["text"], keywords.split(","))
+    return "\n".join(result)
+
+gr.Interface(fn=keyword_search_ui,
+             inputs="text",
+             outputs="text",
+             title="Keyword Search in Audio Transcript").launch()
